@@ -3,7 +3,7 @@ import TodoForm from "@/components/TodoForm";
 
 // 제목 입력창 + 추가 버튼 (COMPONENT_SPEC 3-2, TEST_CASES 2-1)
 describe("TodoForm", () => {
-  test('CMP-FORM-01 처음 그리면 "할 일" 입력창과 "추가" 버튼이 보이고 에러 문구는 없다', () => {
+  test('UI-01 처음 그리면 "할 일" 입력창과 "추가" 버튼이 보이고 에러 문구는 없다', () => {
     render(<TodoForm onAdd={jest.fn()} />);
 
     // "할 일" 라벨로 찾은 입력창과 placeholder

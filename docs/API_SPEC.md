@@ -7,9 +7,10 @@
 ## 1. 공통 규칙
 
 ### 1-1. 기본
-- 주소는 모두 `/api/todos`로 시작한다. Next.js의 API 라우트(`app/api/todos/...`)로 만든다.
+- 주소는 모두 `/api/todos`로 시작한다. FastAPI 서버(`backend/app/`, 포트 8000)에 만든다.
+- 화면은 Next.js 주소(`/api/todos`)로 요청하고, Next.js가 rewrites로 FastAPI에 그대로 넘긴다. 그래서 화면 코드에는 FastAPI 주소가 나오지 않는다.
 - 요청 본문과 응답 본문은 JSON이다. 요청에는 `Content-Type: application/json` 헤더를 붙인다.
-- v0.2(서버 메모리)와 v0.3 이후(MySQL)의 API는 **똑같다**. 저장 위치가 바뀌어도 화면 코드는 고치지 않는다.
+- v0.2(서버 메모리)와 v0.3 이후(PostgreSQL)의 API는 **똑같다**. 저장 위치가 바뀌어도 화면 코드는 고치지 않는다.
 - 로그인이 없으므로 인증 헤더는 없다. (배포 후 접근 제한 방법은 **미결정**, v1.0에서 정함)
 
 ### 1-2. 엔드포인트 목록
@@ -67,7 +68,21 @@
 
 - `INTERNAL_ERROR`의 `message`에는 DB 오류 내용 같은 내부 정보를 넣지 않는다.
 - 정해 둔 필드 말고 다른 필드를 보내면 `VALIDATION_ERROR`로 거절한다. 예를 들어 v0.3에서 PATCH에 `title`을 보내면 거절한다(수정 기능은 v0.4).
-- 만들지 않은 메서드(예: `PUT /api/todos`)를 부르면 Next.js가 자동으로 `405`를 돌려준다. 이 응답은 위 에러 형식이 아닐 수 있다. 화면은 이런 요청을 보내지 않는다.
+- FastAPI는 요청 검사에 실패하면 기본으로 `422`와 `{ "detail": [...] }`를 돌려준다. 이 앱에서는 오류 처리기(exception handler)를 등록해 **`400`과 위 에러 형식**으로 바꿔 보낸다.
+  - 본문이 JSON이 아니거나 비어 있음 → `INVALID_JSON`
+  - 그 밖의 검사 실패 → `VALIDATION_ERROR`. `message`는 아래 표대로 정한다.
+  - 오류가 여러 개면 첫 번째 오류로 응답한다.
+
+| Pydantic 오류 종류 (`type`) | 어느 필드 | message |
+|-----------------------------|-----------|---------|
+| `json_invalid`, 본문 전체가 `missing` | 본문 | (`INVALID_JSON`) 요청 형식이 올바르지 않습니다. |
+| `extra_forbidden` | 정해 두지 않은 필드 | 허용되지 않은 값이 포함되어 있습니다. |
+| `missing`, `string_type` | `title` | 제목을 입력해 주세요. |
+| `value_error` | `title` | 검사 함수가 낸 문구 그대로 ("제목을 입력해 주세요." 또는 "제목은 100자 이하로 입력해 주세요.") |
+| `missing`, `bool_type` | `completed` | 완료 여부는 true 또는 false여야 합니다. |
+
+- `value_error`의 문구는 Pydantic이 앞에 `"Value error, "`를 붙여서 준다. 오류의 `ctx["error"]`에서 원래 문구를 꺼내 쓴다.
+- 만들지 않은 메서드(예: `PUT /api/todos`)나 없는 주소를 부르면 FastAPI가 자동으로 `405`나 `404`와 `{ "detail": "..." }`를 돌려준다. 이 응답은 위 에러 형식이 아니다. 화면은 이런 요청을 보내지 않는다.
 
 ---
 
@@ -236,7 +251,9 @@ Content-Type: application/json
 | 저장 중 DB 오류 | 500 | `INTERNAL_ERROR` | 잠시 후 다시 시도해 주세요. |
 
 - 본문 검사(400)를 먼저 하고, 그다음 할 일이 있는지(404) 확인한다.
-- 구현 참고 (v0.3): `UPDATE` 뒤에 `SELECT`로 다시 읽어서, 행이 없으면 404로 응답한다. 할 일이 있는지는 `UPDATE`의 영향받은 행 수가 아니라 이 `SELECT` 결과로 판단한다.
+- 구현 참고 (v0.3): `UPDATE todos SET completed = %s WHERE id = %s RETURNING ...`으로 바꾸고, 돌려받은 행이 없으면 404로 응답한다.
+- 주소의 `{id}`가 UUID 모양이 아니면(예: `abc`) 찾을 수 없는 것이므로 404 `TODO_NOT_FOUND`로 응답한다. (DELETE도 같음)
+  - 구현 참고: 경로 매개변수를 `todo_id: UUID`로 선언하면 FastAPI가 본문보다 먼저 검사 오류(422)를 낸다. `todo_id: str`로 받고 함수 안에서 UUID로 바꿔 보다가 실패하면 404를 돌려준다. 그래야 "본문 검사 먼저, 그다음 404" 순서가 지켜진다.
 
 ---
 
@@ -292,6 +309,7 @@ export type ErrorResponse = {
 ```
 
 - POST 요청 타입은 DATA_MODEL의 `NewTodoInput`을 그대로 쓴다.
+- 서버 쪽 모델(Pydantic `NewTodoIn`, `UpdateTodoIn`, `TodoOut`)은 DATA_MODEL 4-2에 있다. 이 TypeScript 타입과 JSON 모양이 같아야 한다.
 
 ## 7. 버전별 차이
 
@@ -299,6 +317,6 @@ export type ErrorResponse = {
 |------|-------------|
 | v0.1 | API 없음 |
 | v0.2 | 이 문서 그대로. 데이터는 서버 메모리에 저장. 서버를 끄면 사라짐 |
-| v0.3 | 이 문서 그대로. 데이터는 MySQL에 저장 |
+| v0.3 | 이 문서 그대로. 데이터는 PostgreSQL에 저장 |
 | v0.4 | PATCH에 `title`(수정), GET에 필터를 추가할 예정. 그때 이 문서를 고친다 |
 | v1.0 | 접근 제한 방법에 따라 요청 헤더 등이 추가될 수 있음 (**미결정**) |
