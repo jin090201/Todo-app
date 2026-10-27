@@ -13,6 +13,8 @@ const config: Config = {
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
   },
+  // 터미널 출력(default) + 텍스트 파일 저장(tests/results/test-output.txt)
+  reporters: ["default", "<rootDir>/tests/reporters/text-reporter.js"],
 };
 
 export default createJestConfig(config);

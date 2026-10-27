@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "jest"
+    "test": "jest --json --outputFile=tests/results/test-results.json",
+    "pretest": "node -e \"require('fs').mkdirSync('tests/results',{recursive:true})\""
   },
   "dependencies": {
     "next": "15.5.28",
